@@ -13,6 +13,7 @@ import android.graphics.YuvImage;
 import android.os.Bundle;
 import android.util.Log;
 import android.util.Size;
+import android.widget.Button;
 import android.widget.RadioGroup;
 import android.widget.TextView;
 import android.widget.Toast;
@@ -43,71 +44,85 @@ public class MainActivity extends AppCompatActivity {
     private static final int REQUEST_CODE_PERMISSIONS = 10;
     private static final String[] REQUIRED_PERMISSIONS = {Manifest.permission.CAMERA};
 
-    private enum Backend {
-        CPU, GPU, NPU
-    }
+    private enum Backend { CPU, GPU, NPU }
 
+    // UI Elements
     private PreviewView cameraPreview;
     private GlowImageView upscaledImageView;
     private TextView inferenceTimeView;
     private TextView predictionTimeView;
     private RadioGroup delegateSelectionGroup;
+    private Button plusButton, minusButton;
+    private TextView cropSizeTextView;
 
-    private SuperResolution cpuUpscaler;
-    private SuperResolution gpuUpscaler;
-    private SuperResolution npuUpscaler;
-    private Backend currentBackend = Backend.NPU; // Default to NPU
-
-    private final NumberFormat timeFormatter = new DecimalFormat("0.00");
+    // Model and Execution
+    private SuperResolution cpuUpscaler, gpuUpscaler, npuUpscaler;
+    private Backend currentBackend = Backend.NPU;
     private final ExecutorService backgroundTaskExecutor = Executors.newSingleThreadExecutor();
+
+    // State
+    private int cropSize = 128;
+    private final int CROP_SIZE_STEP = 32;
+    private final int MIN_CROP_SIZE = 64;
+    private final int MAX_CROP_SIZE = 128;
+    private final NumberFormat timeFormatter = new DecimalFormat("0.00");
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.main_activity);
 
+        // Initialize Views
         cameraPreview = findViewById(R.id.camera_preview);
         upscaledImageView = findViewById(R.id.upscaled_image_view);
-        // Use the new ID for the inference time result
         inferenceTimeView = findViewById(R.id.inferenceTimeResultText);
-        // Use the new ID for the end-to-end time result
         predictionTimeView = findViewById(R.id.endToEndTimeResultText);
         delegateSelectionGroup = findViewById(R.id.delegateSelectionGroup);
+        plusButton = findViewById(R.id.plus_button);
+        minusButton = findViewById(R.id.minus_button);
+        cropSizeTextView = findViewById(R.id.crop_size_text);
 
+        // Setup
         if (allPermissionsGranted()) {
             startCamera();
         } else {
-            ActivityCompat.requestPermissions(
-                    this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
+            ActivityCompat.requestPermissions(this, REQUIRED_PERMISSIONS, REQUEST_CODE_PERMISSIONS);
         }
 
-        setupBackendSelection();
+        setupControls();
         createTFLiteUpscalersAsync();
-
-        // Start the glow effect
-//        upscaledImageView.setGlowColor(ContextCompat.getColor(this, R.color.orange));
         upscaledImageView.startGlowEffect();
     }
 
-    private void setupBackendSelection() {
+    private void setupControls() {
+        // Backend Selection
         delegateSelectionGroup.setOnCheckedChangeListener((group, checkedId) -> {
-            if (checkedId == R.id.cpu_radio_button) {
-                currentBackend = Backend.CPU;
-            } else if (checkedId == R.id.gpu_radio_button) {
-                currentBackend = Backend.GPU;
-            } else if (checkedId == R.id.npu_radio_button) {
-                currentBackend = Backend.NPU;
-            }
+            if (checkedId == R.id.cpu_radio_button) currentBackend = Backend.CPU;
+            else if (checkedId == R.id.gpu_radio_button) currentBackend = Backend.GPU;
+            else if (checkedId == R.id.npu_radio_button) currentBackend = Backend.NPU;
         });
+
+        // Crop Size Selection
+        updateCropSizeDisplay(); // Set initial text
+        minusButton.setOnClickListener(v -> {
+            cropSize = Math.max(MIN_CROP_SIZE, cropSize - CROP_SIZE_STEP);
+            updateCropSizeDisplay();
+        });
+        plusButton.setOnClickListener(v -> {
+            cropSize = Math.min(MAX_CROP_SIZE, cropSize + CROP_SIZE_STEP);
+            updateCropSizeDisplay();
+        });
+    }
+
+    private void updateCropSizeDisplay() {
+        cropSizeTextView.setText(cropSize + "x" + cropSize);
     }
 
     private void startCamera() {
         ListenableFuture<ProcessCameraProvider> cameraProviderFuture = ProcessCameraProvider.getInstance(this);
-
         cameraProviderFuture.addListener(() -> {
             try {
                 ProcessCameraProvider cameraProvider = cameraProviderFuture.get();
-
                 Preview preview = new Preview.Builder().build();
                 preview.setSurfaceProvider(cameraPreview.getSurfaceProvider());
 
@@ -123,12 +138,13 @@ public class MainActivity extends AppCompatActivity {
                         matrix.postRotate(image.getImageInfo().getRotationDegrees());
                         Bitmap rotatedBitmap = Bitmap.createBitmap(bitmap, 0, 0, bitmap.getWidth(), bitmap.getHeight(), matrix, true);
 
-                        int cropSize = 128;
-                        int x = (rotatedBitmap.getWidth() - cropSize) / 2;
-                        int y = (rotatedBitmap.getHeight() - cropSize) / 2;
+                        // Use the dynamic cropSize variable
+                        int currentCropSize = this.cropSize;
+                        int x = (rotatedBitmap.getWidth() - currentCropSize) / 2;
+                        int y = (rotatedBitmap.getHeight() - currentCropSize) / 2;
 
-                        if (rotatedBitmap.getWidth() >= cropSize && rotatedBitmap.getHeight() >= cropSize) {
-                            Bitmap croppedBitmap = Bitmap.createBitmap(rotatedBitmap, x, y, cropSize, cropSize);
+                        if (rotatedBitmap.getWidth() >= currentCropSize && rotatedBitmap.getHeight() >= currentCropSize) {
+                            Bitmap croppedBitmap = Bitmap.createBitmap(rotatedBitmap, x, y, currentCropSize, currentCropSize);
                             updatePredictionData(croppedBitmap);
                         }
                     }
@@ -136,11 +152,8 @@ public class MainActivity extends AppCompatActivity {
                 });
 
                 CameraSelector cameraSelector = CameraSelector.DEFAULT_BACK_CAMERA;
-
                 cameraProvider.unbindAll();
-                cameraProvider.bindToLifecycle(
-                        this, cameraSelector, preview, imageAnalysis);
-
+                cameraProvider.bindToLifecycle(this, cameraSelector, preview, imageAnalysis);
             } catch (ExecutionException | InterruptedException e) {
                 Log.e(TAG, "Use case binding failed", e);
             }
@@ -152,17 +165,11 @@ public class MainActivity extends AppCompatActivity {
         ByteBuffer yBuffer = planes[0].getBuffer();
         ByteBuffer uBuffer = planes[1].getBuffer();
         ByteBuffer vBuffer = planes[2].getBuffer();
-
-        int ySize = yBuffer.remaining();
-        int uSize = uBuffer.remaining();
-        int vSize = vBuffer.remaining();
-
+        int ySize = yBuffer.remaining(), uSize = uBuffer.remaining(), vSize = vBuffer.remaining();
         byte[] nv21 = new byte[ySize + uSize + vSize];
-
         yBuffer.get(nv21, 0, ySize);
         vBuffer.get(nv21, ySize, vSize);
         uBuffer.get(nv21, ySize + vSize, uSize);
-
         YuvImage yuvImage = new YuvImage(nv21, ImageFormat.NV21, image.getWidth(), image.getHeight(), null);
         ByteArrayOutputStream out = new ByteArrayOutputStream();
         yuvImage.compressToJpeg(new Rect(0, 0, yuvImage.getWidth(), yuvImage.getHeight()), 100, out);
@@ -173,20 +180,11 @@ public class MainActivity extends AppCompatActivity {
     void updatePredictionData(Bitmap image) {
         SuperResolution activeUpscaler = null;
         switch (currentBackend) {
-            case CPU:
-                activeUpscaler = cpuUpscaler;
-                break;
-            case GPU:
-                activeUpscaler = gpuUpscaler;
-                break;
-            case NPU:
-                activeUpscaler = npuUpscaler;
-                break;
+            case CPU: activeUpscaler = cpuUpscaler; break;
+            case GPU: activeUpscaler = gpuUpscaler; break;
+            case NPU: activeUpscaler = npuUpscaler; break;
         }
-
-        if (activeUpscaler == null) {
-            return; // Models not initialized yet
-        }
+        if (activeUpscaler == null) return;
 
         Bitmap result = activeUpscaler.generateUpscaledImage(image);
         long inferenceTime = activeUpscaler.getLastInferenceTime();
@@ -195,17 +193,7 @@ public class MainActivity extends AppCompatActivity {
         String predictionTimeText = timeFormatter.format((double) predictionTime / 1000000);
 
         runOnUiThread(() -> {
-            // === THIS IS THE KEY CHANGE ===
-            // Directly set the result bitmap. GlowImageView will handle centering it.
             upscaledImageView.setImageBitmap(result);
-
-//            Bitmap finalBitmap = Bitmap.createBitmap(cameraPreview.getWidth(), cameraPreview.getHeight(), Bitmap.Config.ARGB_8888);
-//            Canvas canvas = new Canvas(finalBitmap);
-//            int left = (finalBitmap.getWidth() - result.getWidth()) / 2;
-//            int top = (finalBitmap.getHeight() - result.getHeight()) / 2;
-//            canvas.drawBitmap(result, left, top, new Paint());
-//            upscaledImageView.setImageBitmap(finalBitmap);
-
             inferenceTimeView.setText(inferenceTimeText + " ms");
             predictionTimeView.setText(predictionTimeText + " ms");
         });
@@ -215,13 +203,9 @@ public class MainActivity extends AppCompatActivity {
         backgroundTaskExecutor.execute(() -> {
             String tfLiteModelAsset = this.getResources().getString(R.string.tfLiteModelAsset);
             try {
-                Log.i(TAG, "Creating NPU Upscaler...");
                 npuUpscaler = new SuperResolution(this, tfLiteModelAsset, AIHubDefaults.npuDelegatePriorityOrder);
-                Log.i(TAG, "Creating GPU Upscaler...");
                 gpuUpscaler = new SuperResolution(this, tfLiteModelAsset, AIHubDefaults.gpuDelegatePriorityOrder);
-                Log.i(TAG, "Creating CPU Upscaler...");
                 cpuUpscaler = new SuperResolution(this, tfLiteModelAsset, AIHubDefaults.cpuDelegatePriorityOrder);
-                Log.i(TAG, "All upscalers created.");
             } catch (IOException | NoSuchAlgorithmException | RuntimeException e) {
                 Log.e(TAG, "Error initializing TFLite upscalers", e);
                 runOnUiThread(() -> Toast.makeText(this, "Error initializing models: " + e.getMessage(), Toast.LENGTH_LONG).show());
@@ -231,8 +215,7 @@ public class MainActivity extends AppCompatActivity {
 
     private boolean allPermissionsGranted() {
         for (String permission : REQUIRED_PERMISSIONS) {
-            if (ContextCompat.checkSelfPermission(
-                    this, permission) != PackageManager.PERMISSION_GRANTED) {
+            if (ContextCompat.checkSelfPermission(this, permission) != PackageManager.PERMISSION_GRANTED) {
                 return false;
             }
         }

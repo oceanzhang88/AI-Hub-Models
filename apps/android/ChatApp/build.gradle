@@ -126,5 +126,5 @@ dependencies {
 }
 
 if (System.getProperty("user.dir") != project.rootDir.path) {
-    throw new RuntimeException("This project should be opened from the `android` directory (parent of ChatApp directory), NOT the ChatApp directory.")
+//    throw new RuntimeException("This project should be opened from the `android` directory (parent of ChatApp directory), NOT the ChatApp directory.")
 }

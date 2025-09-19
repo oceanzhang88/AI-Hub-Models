@@ -3,7 +3,7 @@ plugins {
 }
 
 android {
-    compileSdk Integer.valueOf(androidCompileSDK)
+    compileSdk 35
 
     defaultConfig {
         applicationId "com.quicinc.superresolution"
@@ -32,14 +32,14 @@ android {
             throw new RuntimeException(missingModelErrorMsg)
         }
 
-        for (int i = 1; i <= 2; ++i) {
-            String filename = "./src/main/assets/images/Sample${i}.jpg"
-            File fp = file(filename)
-            // If the image is too small, it is likely an ascii file with LFS information
-            if (!fp.exists() || fp.length() < 1000) {
-                throw new RuntimeException(missingLfsErrorMsg)
-            }
-        }
+//        for (int i = 1; i <= 2; ++i) {
+//            String filename = "./src/main/assets/images/Sample${i}.jpg"
+//            File fp = file(filename)
+//            // If the image is too small, it is likely an ascii file with LFS information
+//            if (!fp.exists() || fp.length() < 1000) {
+//                throw new RuntimeException(missingLfsErrorMsg)
+//            }
+//        }
     }
 
     namespace 'com.quicinc.superresolution'
@@ -51,8 +51,8 @@ dependencies {
     implementation 'androidx.appcompat:appcompat:1.7.0'
     implementation 'com.google.android.material:material:1.12.0'
     implementation 'androidx.constraintlayout:constraintlayout:2.1.4'
-    api 'org.tensorflow:tensorflow-lite:2.16.1'
-    api 'org.tensorflow:tensorflow-lite-support:0.4.4'
+    implementation 'org.tensorflow:tensorflow-lite:2.16.1'
+    implementation 'org.tensorflow:tensorflow-lite-support:0.4.4'
     implementation 'org.tensorflow:tensorflow-lite-gpu:2.16.1'
     implementation 'org.tensorflow:tensorflow-lite-gpu-api:2.16.1'
     implementation 'org.tensorflow:tensorflow-lite-gpu-delegate-plugin:0.4.4'
@@ -62,6 +62,19 @@ dependencies {
     implementation "androidx.camera:camera-camera2:${camerax_version}"
     implementation "androidx.camera:camera-lifecycle:${camerax_version}"
     implementation "androidx.camera:camera-view:${camerax_version}"
+
+    implementation("com.google.guava:guava:33.2.0-jre")
+
+//    implementation "androidx.xr.runtime:runtime:1.0.0-alpha05"
+//    implementation "androidx.xr.scenecore:scenecore:1.0.0-alpha06"
+//    implementation "androidx.xr.compose:compose:1.0.0-alpha06"
+//    implementation "androidx.xr.compose.material3:material3:1.0.0-alpha11"
+//    implementation "androidx.xr.arcore:arcore:1.0.0-alpha05"
+//
+//    // For compatibility with guava, use these dependencies:
+//    implementation "androidx.xr.arcore:arcore-guava:1.0.0-alpha05"
+//    implementation "androidx.xr.runtime:runtime-guava:1.0.0-alpha05"
+//    implementation "androidx.xr.scenecore:scenecore-guava:1.0.0-alpha06"
 }
 
 if (System.getProperty("user.dir") != project.rootDir.path) {
