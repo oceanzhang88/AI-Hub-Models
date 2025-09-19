@@ -61,10 +61,10 @@ public class MainActivity extends AppCompatActivity {
     private final ExecutorService backgroundTaskExecutor = Executors.newSingleThreadExecutor();
 
     // State
-    private int cropSize = 128;
+    private int cropSize = 256;
     private final int CROP_SIZE_STEP = 32;
     private final int MIN_CROP_SIZE = 64;
-    private final int MAX_CROP_SIZE = 128;
+    private final int MAX_CROP_SIZE = 256;
     private final NumberFormat timeFormatter = new DecimalFormat("0.00");
 
     @Override
@@ -142,6 +142,9 @@ public class MainActivity extends AppCompatActivity {
                         int currentCropSize = this.cropSize;
                         int x = (rotatedBitmap.getWidth() - currentCropSize) / 2;
                         int y = (rotatedBitmap.getHeight() - currentCropSize) / 2;
+
+                        Log.d(TAG, "rotatedBitmap width: " + rotatedBitmap.getWidth() +
+                                " height: " + rotatedBitmap.getHeight());
 
                         if (rotatedBitmap.getWidth() >= currentCropSize && rotatedBitmap.getHeight() >= currentCropSize) {
                             Bitmap croppedBitmap = Bitmap.createBitmap(rotatedBitmap, x, y, currentCropSize, currentCropSize);
